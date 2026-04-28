@@ -3,7 +3,6 @@ package bomb
 import (
 	"fmt"
 	"math/rand/v2"
-	"os"
 	"time"
 )
 
@@ -20,6 +19,7 @@ type Bomb struct {
 	state    State
 	attempts int
 	timer    *time.Timer
+	pin      []int
 }
 
 func NewBomb() *Bomb {
@@ -32,16 +32,27 @@ func NewBomb() *Bomb {
 
 func (b *Bomb) Plant(duration time.Duration) {
 	b.state = Planted
+	b.pin = GenerateRandomPin(4)
 	fmt.Println("Beep beep beep")
 	b.timer = time.AfterFunc(duration, func() {
-		fmt.Println("BOOOMMMMMMMMMM")
-		os.Exit(1)
+		if b.state != Defused {
+			fmt.Println("BOOOMMMMMMMMMM")
+		}
+
 	})
 }
 
+func (b *Bomb) Defuse() {
+	if b.timer != nil {
+		b.timer.Stop()
+		fmt.Println("Bomb has been defused")
+	}
+}
+
+//
 //
 
-func (b Bomb) LookAtBomb() string {
+func (b *Bomb) LookAtBomb() string {
 	var bombStateString string
 	switch b.state {
 	case Idle:
@@ -57,6 +68,12 @@ func (b Bomb) LookAtBomb() string {
 	return bombStateString
 }
 
+func (b *Bomb) DebugCheckBombPin() []int {
+
+	return b.pin
+
+}
+
 func GenerateRandomPin(l int) []int {
 
 	pin := make([]int, l)
@@ -64,7 +81,7 @@ func GenerateRandomPin(l int) []int {
 		pin[i] = rand.IntN(10) // generate random number from 0 to 10
 
 	}
-
+	fmt.Println("Bomb pin is %v", pin)
 	return pin
 
 }
