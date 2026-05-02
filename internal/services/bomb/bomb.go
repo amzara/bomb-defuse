@@ -2,7 +2,10 @@ package bomb
 
 import (
 	"fmt"
-	"math/rand/v2"
+	"math/rand"
+	"os"
+	"strconv"
+	"strings"
 	"time"
 )
 
@@ -19,75 +22,156 @@ type Bomb struct {
 	state    State
 	attempts int
 	timer    *time.Timer
+	ticker   *time.Ticker
+	beeping  bool
 	pin      []int
+	ch       chan string
+	cmdCh    chan string
 }
 
-func NewBomb() *Bomb {
+func NewBomb(c chan string) *Bomb {
 	return &Bomb{
-		state: Idle,
+		state:   Idle,
+		ch:      c,
+		cmdCh:   make(chan string, 1),
+		beeping: true,
+		pin:     []int{1, 2, 3, 4},
 	}
 }
 
-// https://go.dev/tour/methods/8
+func (b *Bomb) Run() {
 
-func (b *Bomb) Plant(duration time.Duration) {
-	b.state = Planted
-	b.pin = GenerateRandomPin(4)
-	fmt.Println("Beep beep beep")
-	b.timer = time.AfterFunc(duration, func() {
-		if b.state != Defused {
-			fmt.Println("BOOOMMMMMMMMMM")
+	go func() {
+		limiter := time.NewTicker(time.Second / 10) // or whatever rate you want
+		defer limiter.Stop()
+
+		for cmd := range b.ch {
+			<-limiter.C
+			b.cmdCh <- cmd
+		}
+		close(b.cmdCh)
+	}()
+
+	for {
+		select {
+		case cmd := <-b.cmdCh:
+			b.handle(cmd)
+
+		case <-b.tickChan():
+			if b.beeping && b.state == Planted {
+				fmt.Println("BEEP")
+			}
+		}
+	}
+
+} //channel in main.go is just for rate limiting
+//the channel will go to a second channel which will actually do all this
+
+func (b *Bomb) RateLimit() {
+
+}
+
+func (b *Bomb) handle(cmd string) {
+	parts := strings.Fields(cmd)
+	switch parts[0] {
+	case "PLANT":
+		b.Plant(10 * time.Second)
+	case "STATUS":
+		b.Status()
+	case "PIN":
+		b.Pin()
+	case "BEEP":
+		b.beeping = !b.beeping
+	case "DEFUSE":
+		b.Defuse(parts[1:])
+	case "TIMEOUT":
+		b.explode()
+	}
+}
+
+func (b *Bomb) GenerateRandomPin() {
+
+	pin := make([]int, 4)
+	for i := 0; i < 4; i++ {
+		pin[i] = rand.Intn(10)
+	}
+	b.pin = pin
+}
+
+func (b *Bomb) Status() {
+	fmt.Println(b.state)
+
+}
+
+func (b *Bomb) Defuse(pin []string) {
+	if len(pin) != 4 {
+		fmt.Println("Usage: DEFUSE <d> <d> <d> <d>")
+		return
+	}
+	for i := 0; i < 4; i++ {
+		digit, err := strconv.Atoi(pin[i])
+		if err != nil {
+			fmt.Println("Invalid digits")
+			return
+		}
+		if digit != b.pin[i] {
+			fmt.Println("Invalid PIN")
+			return
 		}
 
-	})
-}
+	}
 
-func (b *Bomb) Defuse() {
+	b.stopTicker()
 	if b.timer != nil {
 		b.timer.Stop()
-		fmt.Println("Bomb has been defused")
+	}
+	b.state = Defused
+	fmt.Println("Bomb has been defused")
+
+}
+
+func (b *Bomb) Pin() {
+	fmt.Println(b.pin)
+}
+
+func (b *Bomb) Plant(d time.Duration) {
+	b.state = Planted
+
+	b.GenerateRandomPin()
+
+	b.timer = time.AfterFunc(d, func() {
+		b.cmdCh <- "TIMEOUT"
+	})
+
+	b.ticker = time.NewTicker(time.Second)
+
+	fmt.Printf("Bomb has been planted! ")
+}
+
+func (b *Bomb) stopTicker() {
+	if b.ticker != nil {
+		b.ticker.Stop()
+		b.ticker = nil
 	}
 }
 
-//
-//
+func (b *Bomb) explode() {
+	b.state = Exploded
+	b.stopTicker()
+	fmt.Println("Boom")
+	os.Exit(1)
+}
 
-func (b *Bomb) LookAtBomb() string {
-	var bombStateString string
-	switch b.state {
-	case Idle:
-		return "The bomb is idle"
-	case Planted:
-		return "The bomb has been planted"
-	case Defused:
-		return "The bomb has been defused"
-	case Exploded:
-		return "The bomb has exploded"
+func (b *Bomb) Close() {
+	if b.timer != nil {
+		b.timer.Stop()
 	}
-
-	return bombStateString
+	close(b.ch)
 }
 
-func (b *Bomb) DebugCheckBombPin() []int {
-
-	return b.pin
-
-}
-
-func GenerateRandomPin(l int) []int {
-
-	pin := make([]int, l)
-	for i := 0; i < l; i++ {
-		pin[i] = rand.IntN(10) // generate random number from 0 to 10
-
+func (b *Bomb) tickChan() <-chan time.Time {
+	if b.ticker == nil {
+		return nil
 	}
-	fmt.Println("Bomb pin is %v", pin)
-	return pin
-
+	return b.ticker.C
 }
-
-//learn what is make
-// why does slices need make
-// slices are dynamic arrays
-// relate to channels, they need make too
-// https://www.youtube.com/watch?v=FcdTJbIz5p0
