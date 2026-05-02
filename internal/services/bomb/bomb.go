@@ -42,7 +42,7 @@ func NewBomb(c chan string) *Bomb {
 func (b *Bomb) Run() {
 
 	go func() {
-		limiter := time.NewTicker(time.Second / 10) // or whatever rate you want
+		limiter := time.NewTicker(time.Second / 10)
 		defer limiter.Stop()
 
 		for cmd := range b.ch {
@@ -64,12 +64,7 @@ func (b *Bomb) Run() {
 		}
 	}
 
-} //channel in main.go is just for rate limiting
-//the channel will go to a second channel which will actually do all this
-
-func (b *Bomb) RateLimit() {
-
-}
+} /
 
 func (b *Bomb) handle(cmd string) {
 	parts := strings.Fields(cmd)
